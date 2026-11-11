@@ -1,18 +1,27 @@
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
+# from pydantic import BaseModel, Field
+from sqlmodel import Field, SQLModel, create_engine, Session, select
 
 app = FastAPI()
 
 tasks = []
 next_id = 0
 
-class CreateTask(BaseModel):
+class CreateTask(SQLModel):
     title: str = Field(min_length = 1, max_length= 100)
    
 
-class UpdateTask(BaseModel):
+class UpdateTask(SQLModel):
     title: str = Field(min_length=1, max_length=100)
     done: bool
+
+class Task(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    title: str
+    done: bool = False
+
+engine = create_engine("sqlite:///tasks.db")
+SQLModel.metadata.create_all(engine)
 
 def find_task(task_id: int):
     for task in tasks:
@@ -23,26 +32,27 @@ def find_task(task_id: int):
 
 @app.post("/tasks", status_code=201)
 def create_task(new_task: CreateTask):
-    global next_id 
-    next_id = next_id + 1
-    task = {"id": next_id, "title": new_task.title, "done": False}
-    tasks.append(task)
-    
-    return task
-
+    with Session(engine) as session:
+        task = Task(title=new_task.title)
+        session.add(task)
+        session.commit()
+        session.refresh(task)
+        return task
 
 @app.get("/tasks")
 def list_tasks(done: bool | None = None, limit: int | None= Query(default=None, ge=1)):
-    result = tasks
-    if done is not None: 
-        result = []
-        for task in tasks:
-            if task["done"] == done:
-                result.append(task)
-    if limit is not None:
-        result = result[:limit]
+    with Session(engine) as session:
+        return session.exec(select(Task)).all()
+    # result = tasks
+    # if done is not None: 
+    #     result = []
+    #     for task in tasks:
+    #         if task["done"] == done:
+    #             result.append(task)
+    # if limit is not None:
+    #     result = result[:limit]
 
-    return result
+    # return result
 
 
 @app.get("/tasks/{task_id}")
