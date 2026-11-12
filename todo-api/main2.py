@@ -1,5 +1,4 @@
 from fastapi import FastAPI, HTTPException, Query
-# from pydantic import BaseModel, Field
 from sqlmodel import Field, SQLModel, create_engine, Session, select
 
 app = FastAPI()
@@ -22,7 +21,7 @@ SQLModel.metadata.create_all(engine)
 
 def find_task(session, task_id: int):
     get_task = session.get(Task, task_id)
-    if get_task == None:
+    if get_task is None:
         raise HTTPException(status_code=404, detail="task not found")
     
     return get_task
@@ -40,9 +39,15 @@ def create_task(new_task: CreateTask):
 
 @app.get("/tasks")
 def list_tasks(done: bool | None = None, limit: int | None= Query(default=None, ge=1)):
+    query = select(Task)
     with Session(engine) as session:
-
-        return session.exec(select(Task)).all()
+        if done is not None:
+            query = query.where(Task.done == done)
+        if limit is not None:
+            query = query.limit(limit)
+        tasks = session.exec(query).all()
+        return tasks
+    
 
 
 @app.get("/tasks/{task_id}")
